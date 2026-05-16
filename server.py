@@ -41,6 +41,33 @@ def _parse_date(iso: str) -> str:
         return iso[:10]
 
 
+def _fmt_library(data: dict) -> str:
+    groups = data.get("library", [])
+    if not groups:
+        return "Your ReCall library is empty."
+    total = sum(g.get("count", 0) for g in groups)
+    lines = [f"Your ReCall Library — {total} saves across {len(groups)} tag{'s' if len(groups) != 1 else ''}:\n"]
+    for g in groups:
+        tag = g.get("tag", "Other")
+        count = g.get("count", 0)
+        word_count = g.get("word_count", 0)
+        summary = g.get("summary", "").strip()
+        recent = g.get("recent_titles", [])
+        sub_topics = g.get("sub_topics", [])
+
+        wc_str = f"~{word_count // 1000}k words" if word_count >= 1000 else f"{word_count} words"
+        lines.append(f"{tag} ({count} saves · {wc_str})")
+        if summary:
+            lines.append(f"  {summary}")
+        if sub_topics:
+            topics_str = " · ".join(f"{t['label']} ({t['count']})" for t in sub_topics)
+            lines.append(f"  Topics: {topics_str}")
+        if recent:
+            lines.append(f"  Recent: {' · '.join(recent)}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def _fmt_search(query: str, data: dict) -> str:
     results = data.get("results", [])
     if not results:
@@ -121,7 +148,8 @@ async def recall_list_saved() -> str:
     """List all URLs saved in your ReCall library."""
     log.info("recall_list_saved called")
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # /library makes sequential Gemini calls per tag group — needs a longer timeout.
+        async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
                 f"{RECALL_BASE_URL}/library",
                 json={"token": RECALL_TOKEN},
@@ -129,10 +157,9 @@ async def recall_list_saved() -> str:
             resp.raise_for_status()
             data = resp.json()
             log.debug("recall_list_saved raw: %s", data)
-            # Formatter pending real response shape — returning raw JSON.
-            return json.dumps(data, indent=2)
+            return _fmt_library(data)
     except httpx.TimeoutException:
-        return "Error: ReCall backend timed out after 30s"
+        return "Error: ReCall backend timed out after 90s (library generates AI summaries per tag — try again)"
     except httpx.HTTPStatusError as e:
         return f"Error: ReCall returned {e.response.status_code}: {e.response.text}"
     except Exception as e:
