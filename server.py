@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import sys
@@ -68,13 +67,31 @@ def _fmt_library(data: dict) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _fmt_ask(data: dict) -> str:
+    if data.get("insufficient"):
+        return data.get("synthesis", "Not enough saved content to answer that question.")
+    synthesis = data.get("synthesis", "").strip()
+    sources = data.get("sources", [])
+    lines = [synthesis, ""]
+    if sources:
+        lines.append("Sources:")
+        for i, s in enumerate(sources, 1):
+            title = s.get("title", "Untitled").strip().replace("\n", " ")
+            url = s.get("url", "")
+            tag = s.get("tag", "")
+            meta = f" [{tag}]" if tag else ""
+            lines.append(f"{i}. {title}{meta}")
+            lines.append(f"   {url}")
+    return "\n".join(lines)
+
+
 def _fmt_search(query: str, data: dict) -> str:
     results = data.get("results", [])
     if not results:
         return f"No saved URLs found matching \"{query}\"."
     lines = [f"Results for \"{query}\" — {len(results)} match{'es' if len(results) != 1 else ''}:\n"]
     for i, r in enumerate(results, 1):
-        title = r.get("title", "Untitled").strip()
+        title = r.get("title", "Untitled").strip().replace("\n", " ")
         url = r.get("url", "")
         tag = r.get("tag", "")
         pct = round(r.get("similarity", 0) * 100)
@@ -132,8 +149,7 @@ async def recall_ask(question: str) -> str:
             resp.raise_for_status()
             data = resp.json()
             log.debug("recall_ask raw: %s", data)
-            # Formatter pending real response shape — returning raw JSON.
-            return json.dumps(data, indent=2)
+            return _fmt_ask(data)
     except httpx.TimeoutException:
         return "Error: ReCall backend timed out after 30s"
     except httpx.HTTPStatusError as e:
