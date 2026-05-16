@@ -25,24 +25,23 @@ I built ReCall. I should be able to query it from Claude Desktop while I'm worki
 
 ## Scope (non-negotiable)
 
-### Four tools
+### Three tools
 
-1. **`recall_search(query: str, limit: int = 10) -> str`**
-   Search the user's saved URLs by semantic similarity (using ReCall's existing hybrid BM25+vector search). Returns a formatted list of matches with title, URL, summary snippet, and similarity score.
+1. **`recall_search(query: str) -> str`**
+   Search the user's saved URLs by semantic similarity (ReCall's hybrid BM25+vector search).
+   Returns a formatted list of matches.
 
-2. **`recall_summarize_url(url: str) -> str`**
-   Generate or retrieve a summary for a specific saved URL. If the URL isn't in the user's corpus, returns a clean error. If a cached summary exists, returns that. Otherwise generates one via the backend.
+2. **`recall_ask(question: str) -> str`**
+   RAG Q&A over the saved corpus — ask a free-form question, get an answer grounded in saved URLs.
+   Stronger MCP primitive than per-URL summarization; replaces the originally-planned `recall_summarize_url`.
 
-3. **`recall_compare_urls(url_a: str, url_b: str) -> str`**
-   Compare two saved URLs — what's similar, what's different. Useful for "I saved two articles on X, what's the substantive difference?"
-
-4. **`recall_list_saved(limit: int = 10, sort: str = "recent") -> str`**
-   List recently saved URLs. `sort` accepts `"recent"` or `"popular"` (if popularity data exists).
+3. **`recall_list_saved() -> str`**
+   List URLs in the user's library.
 
 ### Configuration
 
-- One environment variable: `RECALL_API_KEY` (passed as `Authorization: Bearer ...` header to the backend).
-- One optional environment variable: `RECALL_BASE_URL` (defaults to the production Railway URL; configurable for local dev).
+- **`RECALL_TOKEN`** (required): authentication token, sent as `"token"` field in every JSON request body.
+- **`RECALL_BASE_URL`** (optional): defaults to `https://recall-production-9941.up.railway.app`. Override for local dev.
 - No other config. No YAML files, no JSON config, no per-tool settings.
 
 ### Error handling
@@ -61,25 +60,36 @@ I built ReCall. I should be able to query it from Claude Desktop while I'm worki
 
 ## ReCall backend API contract
 
-The MCP server calls the ReCall FastAPI backend over HTTP. Endpoints expected:
+Base URL: `https://recall-production-9941.up.railway.app`
 
-- `GET /search?q={query}&limit={n}` → `[{url, title, summary, score}, ...]`
-- `GET /summarize?url={url}` → `{url, summary}` or `404`
-- `POST /compare` body `{url_a, url_b}` → `{similarities: [...], differences: [...]}`
-- `GET /saved?limit={n}&sort={recent|popular}` → `[{url, title, saved_at, summary}, ...]`
+### Auth pattern
 
-All authenticated with `Authorization: Bearer {RECALL_API_KEY}`.
+Token is sent in the **JSON request body** as the field `"token"` — NOT as an HTTP header.
+There is no `Authorization: Bearer` header. Every endpoint requires the token field.
 
-If any of these endpoints don't exist yet on the backend, **add them first** as thin wrappers around existing internal logic. Don't redesign the backend; just expose what's needed.
+### Endpoints (verified against /openapi.json)
+
+- `POST /search`  — body `{"query": str, "token": str}` — search saved URLs
+- `POST /ask`     — body `{"query": str, "token": str}` — RAG Q&A over corpus
+- `POST /library` — body `{"token": str}` — list saved URLs
+
+Response schemas are untyped in the OpenAPI spec (`{}`). Actual shapes discovered via live calls;
+formatters written from observed responses, not assumed schema.
+
+### Dropped endpoints (do not implement)
+
+- `/summarize` — does not exist on backend
+- `/compare` — does not exist on backend
 
 ## Build sequence
 
-1. Skeleton: `uv init`, dependencies, one stub tool, `mcp dev` working, repo public on GitHub with one-line README.
-2. Real integration: replace stub with real ReCall HTTP calls. Two tools (search + summarize) working end-to-end. Test in `mcp dev` inspector with real saved URLs.
-3. Claude Desktop install: `uv run mcp install server.py --name "ReCall"`, restart Desktop, verify real query → real result. Screenshot for README.
-4. Two more tools (compare + list) + error handling on all four.
-5. README polish.
-6. (Stretch) Streaming, PyPI publish.
+1. ✅ Skeleton: `uv init`, dependencies, stub `recall_search`, `mcp dev` working.
+2. Real integration (current): wire all three tools to real backend. Discover response shapes via
+   live inspector calls; write formatters from actual JSON. All three tools in one block.
+3. Claude Desktop install: `uv run mcp install server.py --name "ReCall"`, restart Desktop,
+   verify real query → real result. Screenshot for README.
+4. README polish.
+5. (Stretch) Streaming, PyPI publish.
 
 ## README requirements
 
@@ -98,7 +108,7 @@ The README is what people see first. Required structure:
 - **Do NOT pin MCP SDK to v2.x.** Use `>=1.25,<2`.
 - **Do NOT use `print()` in tool functions.** Logging to stderr only.
 - **Do NOT ship without the Claude Desktop screenshot in the README.** A reviewer landing on the repo should see the tool being called within the first 5 seconds of scrolling.
-- **Do NOT add features outside the four-tool scope** in v0.1. New tools wait for v0.2.
+- **Do NOT add features outside the three-tool scope** in v0.1. New tools wait for v0.2.
 - **Do NOT block the event loop** — all backend HTTP calls must be async (use `httpx.AsyncClient`).
 
 ## What "done" looks like
@@ -120,14 +130,12 @@ This is mini-project #2 in the AI Native Builder Prep Brief v12 (8-week plan tar
 
 ## ReCall backend reference
 
-The backend this server talks to lives at `C:\Users\Ayush Samson D'souza\Desktop\ReCall` on my local machine.
+Local backend: `C:\Users\Ayush Samson D'souza\Desktop\ReCall`
 
-**Deployed backend (Railway)**: `https://railway.com/project/7e524d65-cf27-42e9-8612-f9ac6dc8fb84/service/f3bda033-151b-42db-b5a0-54265e8f4ae7?environmentId=2d19cafa-ecf9-4810-9ada-9250dba337d1` — confirm before wiring real calls.
+**Deployed backend (Railway)**: `https://recall-production-9941.up.railway.app`
+(verified 2026-05-16 — fetched /openapi.json and confirmed endpoint surface)
 
-**Frontend (Vercel, not what we want)**: `https://recall-iota-six.vercel.app/` — this is the React app; the MCP server doesn't talk to this.
+**Frontend (Vercel, not what we want)**: `https://recall-iota-six.vercel.app/` — React app only.
 
-Stack: FastAPI + Supabase + pgvector. Hybrid BM25 + vector search using Gemini embeddings (gemini-embedding-001, 768 dimensions).
-
-Live API docs: `https://railway.com/project/7e524d65-cf27-42e9-8612-f9ac6dc8fb84/service/f3bda033-151b-42db-b5a0-54265e8f4ae7?environmentId=2d19cafa-ecf9-4810-9ada-9250dba337d1/docs` (FastAPI auto-generates this; check `/openapi.json` for the raw spec).
-
-To inspect actual endpoint signatures, either ask me to paste relevant route files from the local backend, or fetch the OpenAPI spec from `/openapi.json`.
+Stack: FastAPI + Supabase + pgvector. Hybrid BM25 + vector search, Gemini embeddings
+(gemini-embedding-001, 768 dimensions).
