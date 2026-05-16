@@ -40,16 +40,20 @@ I built ReCall. I should be able to query it from Claude Desktop while I'm worki
 
 ### Configuration
 
-- **`RECALL_TOKEN`** (required): authentication token, sent as `"token"` field in every JSON request body.
+- **`RECALL_REFRESH_TOKEN`** (preferred): long-lived Supabase refresh token. Server auto-exchanges it for a fresh access token on 401 — set once, never update. Get from DevTools → Application → Local Storage → `sb-*-auth-token` → `refresh_token`.
+- **`RECALL_TOKEN`** (fallback): short-lived Supabase JWT. Works if no refresh token is set, but expires hourly and requires manual config update + Desktop restart.
 - **`RECALL_BASE_URL`** (optional): defaults to `https://recall-production-9941.up.railway.app`. Override for local dev.
 - No other config. No YAML files, no JSON config, no per-tool settings.
+
+Token is sent as the `"token"` field in every JSON request body — NOT as an HTTP header. Auto-refresh uses the Supabase `/auth/v1/token?grant_type=refresh_token` endpoint with the public anon key (embedded in server.py; same key that's in the frontend bundle).
 
 ### Error handling
 
 - Every tool body wrapped in try/except.
-- On backend timeout (>10s): return `"Error: ReCall backend timed out after 10s"`.
+- Timeouts: 30s for `/search` and `/ask`; 90s for `/library` (makes sequential Gemini calls per tag group).
+- On backend timeout: return descriptive error string (includes timeout duration and context for library).
 - On backend HTTP error: return `"Error: ReCall returned {status_code}: {message}"`.
-- On URL-not-in-corpus: return `"This URL isn't in your saved corpus."` (don't crash).
+- On 401: auto-refresh access token via refresh token and retry once before surfacing the error.
 - **Never raise an unhandled exception.** A crash kills the MCP server process and disconnects all tools mid-conversation.
 
 ### Logging
@@ -66,6 +70,8 @@ Base URL: `https://recall-production-9941.up.railway.app`
 
 Token is sent in the **JSON request body** as the field `"token"` — NOT as an HTTP header.
 There is no `Authorization: Bearer` header. Every endpoint requires the token field.
+
+The server manages token lifecycle: `RECALL_REFRESH_TOKEN` is exchanged for a short-lived access token on first 401 using Supabase's `/auth/v1/token?grant_type=refresh_token` endpoint. The refreshed token is stored in module-level state for the process lifetime.
 
 ### Endpoints (verified against /openapi.json)
 
@@ -84,12 +90,11 @@ formatters written from observed responses, not assumed schema.
 ## Build sequence
 
 1. ✅ Skeleton: `uv init`, dependencies, stub `recall_search`, `mcp dev` working.
-2. Real integration (current): wire all three tools to real backend. Discover response shapes via
-   live inspector calls; write formatters from actual JSON. All three tools in one block.
-3. Claude Desktop install: `uv run mcp install server.py --name "ReCall"`, restart Desktop,
-   verify real query → real result. Screenshot for README.
-4. README polish.
-5. (Stretch) Streaming, PyPI publish.
+2. ✅ Real integration: wired all three tools to real backend. Response shapes discovered via live MCP inspector calls; formatters written from actual JSON.
+3. ✅ Claude Desktop install: config written manually (Windows Store app — `mcp install` can't find it). Verified with real query → real result. Screenshot added to README.
+4. ✅ README polish: one-sentence description, demo screenshot, tool list, install + config, manual config JSON, why section, MIT license.
+5. ✅ Auto token refresh: added `RECALL_REFRESH_TOKEN` support. Server auto-refreshes via Supabase on 401 — no more hourly manual token updates.
+6. (Stretch) Streaming, PyPI publish.
 
 ## README requirements
 
@@ -111,9 +116,17 @@ The README is what people see first. Required structure:
 - **Do NOT add features outside the three-tool scope** in v0.1. New tools wait for v0.2.
 - **Do NOT block the event loop** — all backend HTTP calls must be async (use `httpx.AsyncClient`).
 
+## Claude Desktop install notes (Windows Store)
+
+`mcp install` cannot locate the Windows Store Claude Desktop app automatically. Config must be written manually:
+
+Path: `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`
+
+Use the full path to `uv.exe` (e.g. `C:\Users\you\.local\bin\uv.exe`) and double-backslash all paths. After editing the config, fully quit Claude Desktop from the system tray and reopen — a window close is not enough.
+
 ## What "done" looks like
 
-A working MCP server installed in my Claude Desktop. I can ask Claude *"What have I saved recently about MCP?"* and get a real answer from my real corpus. The repo is public. The README has a screenshot. Total code: probably 150–250 lines of Python.
+✅ A working MCP server installed in Claude Desktop. Real queries return real results from the live corpus. The repo is public. The README has a screenshot. Token rotation is fully automated via refresh token — no manual maintenance required.
 
 ## Out-of-scope (future, not v0.1)
 

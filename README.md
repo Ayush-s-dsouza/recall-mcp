@@ -32,10 +32,15 @@ Restart Claude Desktop. ReCall will appear under **+ → Connectors**.
 
 | Variable | Required | Default |
 |---|---|---|
-| `RECALL_TOKEN` | Yes | — |
+| `RECALL_REFRESH_TOKEN` | Yes (preferred) | — |
+| `RECALL_TOKEN` | Fallback | — |
 | `RECALL_BASE_URL` | No | `https://recall-production-9941.up.railway.app` |
 
-`RECALL_TOKEN` is your Supabase session JWT. Get it from the ReCall frontend: **DevTools → Application → Local Storage → `sb-*-auth-token` → `access_token`**. It expires hourly — update the config and restart Claude Desktop when it does.
+**Use `RECALL_REFRESH_TOKEN` — it never needs updating.** The server exchanges it for a fresh access token automatically whenever the hourly JWT expires.
+
+Get it from the ReCall frontend: **DevTools → Application → Local Storage → `sb-*-auth-token` → `refresh_token`**.
+
+`RECALL_TOKEN` (the short-lived JWT) still works as a fallback if you don't set a refresh token, but you'll need to update it every hour.
 
 ## Manual config
 
@@ -48,7 +53,7 @@ Add this to `claude_desktop_config.json` (path varies by OS and install method):
       "command": "uv",
       "args": ["run", "--directory", "/path/to/recall-mcp", "server.py"],
       "env": {
-        "RECALL_TOKEN": "your_token_here"
+        "RECALL_REFRESH_TOKEN": "your_refresh_token_here"
       }
     }
   }
