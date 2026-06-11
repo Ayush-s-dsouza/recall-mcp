@@ -1,0 +1,59 @@
+{
+  "manifest_version": "0.4",
+  "name": "recall-mcp",
+  "display_name": "ReCall",
+  "version": "0.1.0",
+  "description": "Query your ReCall saved-URL corpus from inside Claude Desktop using natural language.",
+  "long_description": "Exposes your ReCall saved-URL library as MCP tools: semantic search, RAG-style Q&A over your saved pages, and a tag-grouped library overview. Requires a ReCall account and a refresh token from ReCall → Settings → Connect to other apps.",
+  "author": {
+    "name": "Ayush Samson D'souza",
+    "url": "https://github.com/Ayush-s-dsouza"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ayush-s-dsouza/recall-mcp"
+  },
+  "homepage": "https://github.com/Ayush-s-dsouza/recall-mcp",
+  "server": {
+    "type": "uv",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "server.py"],
+      "env": {
+        "RECALL_REFRESH_TOKEN": "${user_config.recall_refresh_token}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "recall_search",
+      "description": "Search your saved URLs by semantic similarity."
+    },
+    {
+      "name": "recall_ask",
+      "description": "Ask a question answered from your saved URLs (RAG Q&A over your corpus)."
+    },
+    {
+      "name": "recall_list_saved",
+      "description": "List all URLs saved in your ReCall library."
+    }
+  ],
+  "user_config": {
+    "recall_refresh_token": {
+      "type": "string",
+      "title": "ReCall refresh token",
+      "description": "Your ReCall token, from ReCall → Settings → Connect to other apps.",
+      "required": true,
+      "sensitive": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "python": ">=3.13"
+    }
+  },
+  "keywords": ["recall", "search", "rag", "personal-knowledge-base"],
+  "license": "MIT"
+}
