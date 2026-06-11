@@ -14,12 +14,23 @@ Query your [ReCall](https://recall-iota-six.vercel.app/) saved-URL corpus from i
 
 ## Install
 
-**Requirements:** Python 3.11+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Claude Desktop.
+### Option 1: One-click (recommended)
+
+**Requirements:** [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, Claude Desktop.
+
+1. Download [`recall-mcp.mcpb`](https://github.com/Ayush-s-dsouza/recall-mcp/releases/latest) from the latest release.
+2. Double-click the file (or drag it into **Claude Desktop → Settings → Extensions**) to install.
+3. When prompted for **"ReCall refresh token"**, paste your token — get it from **ReCall → Settings → Connect to other apps**.
+4. Restart Claude Desktop. ReCall will appear under **+ → Connectors**.
+
+### Option 2: Manual install (for developers)
+
+**Requirements:** Python 3.13+, [uv](https://docs.astral.sh/uv/getting-started/installation/), Claude Desktop.
 
 ```bash
 git clone https://github.com/Ayush-s-dsouza/recall-mcp
 cd recall-mcp
-uv run mcp install server.py --name "ReCall" -v "RECALL_TOKEN=your_token"
+uv run mcp install server.py --name "ReCall" -v "RECALL_REFRESH_TOKEN=your_token"
 ```
 
 Restart Claude Desktop. ReCall will appear under **+ → Connectors**.
@@ -38,7 +49,7 @@ Restart Claude Desktop. ReCall will appear under **+ → Connectors**.
 
 **Use `RECALL_REFRESH_TOKEN` — it never needs updating.** The server exchanges it for a fresh access token automatically whenever the hourly JWT expires.
 
-Get it from the ReCall frontend: **DevTools → Application → Local Storage → `sb-*-auth-token` → `refresh_token`**.
+Get it from **ReCall → Settings → Connect to other apps**.
 
 `RECALL_TOKEN` (the short-lived JWT) still works as a fallback if you don't set a refresh token, but you'll need to update it every hour.
 
