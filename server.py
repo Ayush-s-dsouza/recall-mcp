@@ -16,16 +16,69 @@ log = logging.getLogger("recall-mcp")
 RECALL_BASE_URL = os.environ.get(
     "RECALL_BASE_URL", "https://recall-production-9941.up.railway.app"
 )
-RECALL_TOKEN = os.environ.get("RECALL_TOKEN", "")
+RECALL_REFRESH_TOKEN = os.environ.get("RECALL_REFRESH_TOKEN", "")
 
-if not RECALL_TOKEN:
+# Public anon key — safe to embed (it's in the frontend JS bundle).
+_SUPABASE_URL = "https://ompfoouatzknuidnccsz.supabase.co"
+_SUPABASE_ANON_KEY = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    ".eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9tcGZvb3VhdHprbnVpZG5jY3N6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMDM4MjUsImV4cCI6MjA4OTY3OTgyNX0"
+    ".dbupVBs9RDSTwTW4-2wC8YRMnf7qSKaLuw9giVVV6oI"
+)
+
+# In-memory token state — refreshed automatically on 401.
+_access_token: str = os.environ.get("RECALL_TOKEN", "")
+_refresh_token: str = RECALL_REFRESH_TOKEN
+
+if not _access_token and not _refresh_token:
     sys.stderr.write(
-        "ERROR: RECALL_TOKEN environment variable is not set. "
-        "Export it before starting the server.\n"
+        "ERROR: Set RECALL_REFRESH_TOKEN (preferred) or RECALL_TOKEN in the config.\n"
+        "Get RECALL_REFRESH_TOKEN from DevTools → Application → Local Storage → "
+        "sb-*-auth-token → refresh_token\n"
     )
     sys.exit(1)
 
 mcp = FastMCP("ReCall")
+
+
+# ---------------------------------------------------------------------------
+# Token management
+# ---------------------------------------------------------------------------
+
+async def _refresh_access_token() -> bool:
+    """Exchange the refresh token for a new access token. Returns True on success."""
+    global _access_token, _refresh_token
+    if not _refresh_token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{_SUPABASE_URL}/auth/v1/token?grant_type=refresh_token",
+                headers={"apikey": _SUPABASE_ANON_KEY, "Content-Type": "application/json"},
+                json={"refresh_token": _refresh_token},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            _access_token = data["access_token"]
+            _refresh_token = data.get("refresh_token", _refresh_token)
+            log.info("Token refreshed successfully")
+            return True
+    except Exception:
+        log.exception("Token refresh failed")
+        return False
+
+
+async def _post(client: httpx.AsyncClient, url: str, body: dict) -> httpx.Response:
+    """POST with automatic token refresh on 401."""
+    body = {**body, "token": _access_token}
+    resp = await client.post(url, json=body)
+    if resp.status_code == 401 and _refresh_token:
+        log.info("Got 401 — attempting token refresh")
+        if await _refresh_access_token():
+            body["token"] = _access_token
+            resp = await client.post(url, json=body)
+    resp.raise_for_status()
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -119,11 +172,7 @@ async def recall_search(query: str) -> str:
     log.info("recall_search called: query=%r", query)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{RECALL_BASE_URL}/search",
-                json={"query": query, "token": RECALL_TOKEN},
-            )
-            resp.raise_for_status()
+            resp = await _post(client, f"{RECALL_BASE_URL}/search", {"query": query})
             data = resp.json()
             log.debug("recall_search raw: %s", data)
             return _fmt_search(query, data)
@@ -142,11 +191,7 @@ async def recall_ask(question: str) -> str:
     log.info("recall_ask called: question=%r", question)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                f"{RECALL_BASE_URL}/ask",
-                json={"query": question, "token": RECALL_TOKEN},
-            )
-            resp.raise_for_status()
+            resp = await _post(client, f"{RECALL_BASE_URL}/ask", {"query": question})
             data = resp.json()
             log.debug("recall_ask raw: %s", data)
             return _fmt_ask(data)
@@ -166,11 +211,7 @@ async def recall_list_saved() -> str:
     try:
         # /library makes sequential Gemini calls per tag group — needs a longer timeout.
         async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(
-                f"{RECALL_BASE_URL}/library",
-                json={"token": RECALL_TOKEN},
-            )
-            resp.raise_for_status()
+            resp = await _post(client, f"{RECALL_BASE_URL}/library", {})
             data = resp.json()
             log.debug("recall_list_saved raw: %s", data)
             return _fmt_library(data)
