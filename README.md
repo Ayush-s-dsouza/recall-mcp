@@ -21,7 +21,7 @@ Query your [ReCall](https://recall-iota-six.vercel.app/) saved-URL corpus from i
 1. Download [`recall-mcp.mcpb`](https://github.com/Ayush-s-dsouza/recall-mcp/releases/latest) from the latest release.
 2. Double-click the file (or drag it into **Claude Desktop → Settings → Extensions**) to install.
 3. When prompted for **"ReCall refresh token"**, paste your token — get it from **ReCall → Settings → Connect to other apps**.
-4. Restart Claude Desktop. ReCall will appear under **+ → Connectors**.
+4. After install, ReCall will appear under Settings → Extensions, disabled by default. Toggle it on — Claude Desktop will then make recall_search, recall_ask, and recall_list_saved available in your conversations.
 
 ### Option 2: Manual install (for developers)
 
