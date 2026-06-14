@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "recall-mcp",
   "display_name": "ReCall",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Query your ReCall saved-URL corpus from inside Claude Desktop using natural language.",
   "long_description": "Exposes your ReCall saved-URL library as MCP tools: semantic search, RAG-style Q&A over your saved pages, and a tag-grouped library overview. Requires a ReCall account and a refresh token from ReCall → Settings → Connect to other apps.",
   "author": {
