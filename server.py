@@ -1,7 +1,9 @@
+import json
 import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -26,9 +28,39 @@ _SUPABASE_ANON_KEY = (
     ".dbupVBs9RDSTwTW4-2wC8YRMnf7qSKaLuw9giVVV6oI"
 )
 
+# Supabase rotates the refresh token on every use, so the value configured at
+# install time becomes stale after the first refresh. We cache the latest
+# rotated token on disk, keyed to the configured token, so it survives process
+# restarts without the user re-entering anything.
+_TOKEN_CACHE_PATH = Path.home() / ".recall-mcp" / "token_cache.json"
+
+
+def _load_cached_refresh_token() -> str:
+    try:
+        cache = json.loads(_TOKEN_CACHE_PATH.read_text())
+        if cache.get("source_refresh_token") == RECALL_REFRESH_TOKEN:
+            return cache.get("current_refresh_token") or RECALL_REFRESH_TOKEN
+    except (OSError, ValueError):
+        pass
+    return RECALL_REFRESH_TOKEN
+
+
+def _save_refresh_token(token: str) -> None:
+    try:
+        _TOKEN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _TOKEN_CACHE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "source_refresh_token": RECALL_REFRESH_TOKEN,
+            "current_refresh_token": token,
+        }))
+        tmp.replace(_TOKEN_CACHE_PATH)
+    except OSError:
+        log.exception("Failed to persist refreshed token to %s", _TOKEN_CACHE_PATH)
+
+
 # In-memory token state — refreshed automatically on 401.
 _access_token: str = os.environ.get("RECALL_TOKEN", "")
-_refresh_token: str = RECALL_REFRESH_TOKEN
+_refresh_token: str = _load_cached_refresh_token()
 
 if not _access_token and not _refresh_token:
     sys.stderr.write(
@@ -60,7 +92,10 @@ async def _refresh_access_token() -> bool:
             resp.raise_for_status()
             data = resp.json()
             _access_token = data["access_token"]
-            _refresh_token = data.get("refresh_token", _refresh_token)
+            new_refresh_token = data.get("refresh_token", _refresh_token)
+            if new_refresh_token != _refresh_token:
+                _save_refresh_token(new_refresh_token)
+            _refresh_token = new_refresh_token
             log.info("Token refreshed successfully")
             return True
     except Exception:
