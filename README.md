@@ -1,5 +1,7 @@
 # recall-mcp
 
+> **Superseded.** ReCall now has a built-in connector for Claude and ChatGPT — no install, no token to copy. In ReCall, go to **Settings → Connect to Claude or ChatGPT**, copy the URL, and add it as a custom connector. This repo is kept around for anyone still running the existing local install; new setups should use the connector instead.
+
 Query your [ReCall](https://recall-iota-six.vercel.app/) saved-URL corpus from inside Claude Desktop using natural language.
 
 ![Claude Desktop calling recall_search with a real result](demo.png)
